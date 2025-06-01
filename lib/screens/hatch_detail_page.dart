@@ -7,7 +7,10 @@ import '../widgets/incubation_progress.dart';
 import '../widgets/sensor_graph.dart';
 import '../services/sensor_data_service.dart';
 import '../widgets/egg_flip_countdown.dart';
-import 'timeline_tile_custom.dart';
+import '../widgets/timeline_tile_custom.dart';
+import '../widgets/incubation_report_form.dart';
+import '../services/incubation_report_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class HatchDetailPage extends StatefulWidget {
   final Batch batch;
@@ -37,11 +40,13 @@ class _HatchDetailPageState extends State<HatchDetailPage> {
   List<Map<String, dynamic>> _visibleEvents = [];
   bool _isDisposed = false;
   bool _isInitialized = false;
+  late final IncubationReportService _reportService;
 
   @override
   void initState() {
     super.initState();
     _safeInitialize();
+    _initializeService();
   }
 
   Future<void> _safeInitialize() async {
@@ -95,34 +100,45 @@ class _HatchDetailPageState extends State<HatchDetailPage> {
         {
           'title': 'Début de la couvée',
           'date': widget.batch.startDate,
+          'subtitle': 'Jour 1',
           'before': (days) => '$days jours restants',
           'after': 'Couvée commencée',
         },
         {
           'title': 'Date de mirage',
           'date': widget.batch.startDate.add(const Duration(days: 7)),
+          'subtitle': 'Jour 7',
           'before': (days) => '$days jours restants',
           'after': 'Mirage effectué',
         },
         {
           'title': 'Début de l\'éclosoir',
           'date': widget.batch.startDate.add(const Duration(days: 18)),
+          'subtitle': 'Jour 18',
           'before': (days) => '$days jours restants',
           'after': 'Éclosoir commencé',
         },
         {
-          'title': 'Sortie des poussins',
+          'title': 'Évaluation finale',
           'date': widget.batch.startDate.add(const Duration(days: 21)),
+          'subtitle': 'Jour 21',
           'before': (days) => '$days jours restants',
-          'after': 'Sortie terminée',
+          'after': 'Évaluation terminée',
+          'questions': [
+            'Nombre de poussins éclos',
+            'Présence d\'anomalies',
+            'Qualité des poussins',
+            'Taux d\'éclosion',
+            'Observations générales'
+          ],
         },
       ];
 
       // Simple, safe logic: show all events, mark past/future in UI only
       _visibleEvents = List<Map<String, dynamic>>.from(_timelineEvents);
-      debugPrint('Timeline events initialized: \\n$_visibleEvents');
+      debugPrint('Timeline events initialized: \n$_visibleEvents');
     } catch (e, stackTrace) {
-      debugPrint('Error initializing timeline events: $e\\n$stackTrace');
+      debugPrint('Error initializing timeline events: $e\n$stackTrace');
       _visibleEvents = [];
     }
   }
@@ -303,6 +319,113 @@ class _HatchDetailPageState extends State<HatchDetailPage> {
     );
   }
 
+  Future<void> _initializeService() async {
+    final prefs = await SharedPreferences.getInstance();
+    _reportService = IncubationReportService(prefs);
+    setState(() => _isLoading = false);
+  }
+
+  Widget _buildQuestionnaireSection() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return FutureBuilder<bool>(
+      future: _reportService.hasReport(widget.batch.id),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              'Erreur lors du chargement du questionnaire',
+              style: TextStyle(color: Colors.red.shade700),
+            ),
+          );
+        }
+
+        final hasReport = snapshot.data ?? false;
+        if (hasReport) {
+          return Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Questionnaire complété',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Merci d\'avoir complété le questionnaire d\'incubation.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Questionnaire d\'incubation',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Veuillez compléter ce questionnaire pour nous aider à améliorer nos services.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 16),
+                IncubationReportForm(
+                  batchId: widget.batch.id,
+                  batchName: widget.batch.name,
+                  onSubmit: (report) async {
+                    try {
+                      debugPrint(
+                          'Saving report for batch: ${widget.batch.name}');
+                      debugPrint('Report details: ${report.toJson()}');
+                      await _reportService.saveReport(report);
+                      debugPrint('Report saved successfully');
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content:
+                                Text('Questionnaire enregistré avec succès'),
+                          ),
+                        );
+                        setState(() {});
+                      }
+                    } catch (e) {
+                      debugPrint('Error saving report: $e');
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                                'Erreur lors de l\'enregistrement du questionnaire: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_isInitialized) {
@@ -358,6 +481,10 @@ class _HatchDetailPageState extends State<HatchDetailPage> {
       );
     }
 
+    final daysDiff = DateTime.now().difference(widget.batch.startDate).inDays;
+    final currentDay = daysDiff + 1;
+    final totalDays = 21;
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -383,103 +510,102 @@ class _HatchDetailPageState extends State<HatchDetailPage> {
           onRefresh: () async {
             await _safeInitialize();
           },
-          child: ListView(
+          child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            children: [
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 24.0),
-                width: double.infinity,
-                alignment: Alignment.center,
-                child: IncubationProgress(
-                  startDate: widget.batch.startDate,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 24.0),
+                  width: double.infinity,
+                  alignment: Alignment.center,
+                  child: IncubationProgress(
+                    startDate: widget.batch.startDate,
+                  ),
                 ),
-              ),
-              /* Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                child: EggFlipCountdown(
-                  key: ValueKey(widget.batch.id),
-                  batchId: widget.batch.id,
-                  batchName: widget.batch.name,
-                  onFlip: () {
-                    if (!_isDisposed && mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Retournement des oeufs enregistré !'),
-                          backgroundColor: Colors.amber,
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16.0, vertical: 8.0),
+                  child: EggFlipCountdown(
+                    key: ValueKey('egg_flip_${widget.batch.id}'),
+                    batchId: widget.batch.id,
+                    batchName: widget.batch.name,
+                  ),
+                ),
+                const Divider(height: 16),
+                // Sensor Graphs
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16.0, vertical: 8.0),
+                  child: Column(
+                    children: [
+                      SizedBox(
+                        height: 300,
+                        child: _buildSensorGraph(
+                          widget.sensorService.temperatureStream,
+                          'Température',
+                          '°C',
+                          SensorDataService.minTemp,
+                          SensorDataService.maxTemp,
+                          Colors.orange,
+                          Colors.red,
                         ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: 300,
+                        child: _buildSensorGraph(
+                          widget.sensorService.humidityStream,
+                          'Humidité',
+                          '%',
+                          SensorDataService.minHumidity,
+                          SensorDataService.maxHumidity,
+                          Colors.blue,
+                          Colors.red,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Timeline
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16.0),
+                  child: Column(
+                    children: _visibleEvents.map((event) {
+                      final eventDate = event['date'] as DateTime;
+                      final isLast = event == _visibleEvents.last;
+                      final now = DateTime.now();
+                      final daysDiff = eventDate.difference(now).inDays;
+                      final isPast = now.isAfter(eventDate);
+                      final totalDays = 21; // Total incubation period
+                      final currentDay =
+                          now.difference(widget.batch.startDate).inDays;
+
+                      String subtitle;
+                      if (isPast) {
+                        subtitle =
+                            event['after'] is String ? event['after'] : '';
+                      } else {
+                        subtitle = event['before'] is Function
+                            ? event['before'](daysDiff)
+                            : '';
+                      }
+                      return CustomTimelineTile(
+                        key: ValueKey(event['title']),
+                        title: event['title'] as String,
+                        date: eventDate,
+                        currentDay: currentDay,
+                        totalDays: totalDays,
+                        isCompleted: isPast,
+                        isLast: isLast,
+                        subtitle: subtitle,
                       );
-                    }
-                  },
+                    }).toList(),
+                  ),
                 ),
-              ), */
-              const Divider(height: 16),
-              // Sensor Graphs
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                child: Column(
-                  children: [
-                    SizedBox(
-                      height: 300,
-                      child: _buildSensorGraph(
-                        widget.sensorService.temperatureStream,
-                        'Température',
-                        '°C',
-                        SensorDataService.minTemp,
-                        SensorDataService.maxTemp,
-                        Colors.orange,
-                        Colors.red,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 300,
-                      child: _buildSensorGraph(
-                        widget.sensorService.humidityStream,
-                        'Humidité',
-                        '%',
-                        SensorDataService.minHumidity,
-                        SensorDataService.maxHumidity,
-                        Colors.blue,
-                        Colors.red,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Timeline
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16.0),
-                child: Column(
-                  children: _visibleEvents.map((event) {
-                    final eventDate = event['date'] as DateTime;
-                    final isLast = event == _visibleEvents.last;
-                    final daysDiff =
-                        eventDate.difference(DateTime.now()).inDays;
-                    final isPast = DateTime.now().isAfter(eventDate);
-                    String subtitle;
-                    if (isPast) {
-                      subtitle = event['after'] is String ? event['after'] : '';
-                    } else {
-                      subtitle = event['before'] is Function
-                          ? event['before'](daysDiff)
-                          : '';
-                    }
-                    return CustomTimelineTile(
-                      key: ValueKey(event['title']),
-                      title: event['title'] as String,
-                      date: eventDate,
-                      currentDay: 0,
-                      totalDays: 0,
-                      isCompleted: isPast,
-                      isLast: isLast,
-                      subtitle: subtitle,
-                    );
-                  }).toList(),
-                ),
-              ),
-            ],
+                if (currentDay >= 21) _buildQuestionnaireSection(),
+              ],
+            ),
           ),
         ),
       ),

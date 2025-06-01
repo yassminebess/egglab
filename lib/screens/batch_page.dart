@@ -44,17 +44,23 @@ class _BatchPageState extends State<BatchPage> {
 
     try {
       final batches = await widget.batchService.getBatches();
+      debugPrint('Loaded batches: ${batches.length}');
+      for (final batch in batches) {
+        debugPrint(
+            'Batch: ${batch.name} (ID: ${batch.id}, Active: ${batch.isActive})');
+      }
       if (mounted) {
         setState(() {
           _batches = batches;
           _isLoading = false;
         });
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('Error loading batches: $e\n$stackTrace');
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _errorMessage = 'Erreur lors du chargement des couvées';
+          _errorMessage = 'Erreur lors du chargement des couvées: $e';
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -82,6 +88,99 @@ class _BatchPageState extends State<BatchPage> {
             icon: const Icon(Icons.refresh),
             onPressed: _loadBatches,
             tooltip: 'Actualiser',
+          ),
+          PopupMenuButton<String>(
+            onSelected: (value) async {
+              if (value == 'reset') {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Réinitialiser les données'),
+                    content: const Text(
+                      'Êtes-vous sûr de vouloir réinitialiser toutes les données des couvées ? Cette action est irréversible.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Annuler'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Réinitialiser'),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (confirmed == true) {
+                  try {
+                    await widget.batchService.resetBatches();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Données réinitialisées avec succès'),
+                        ),
+                      );
+                      _loadBatches();
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content:
+                              Text('Erreur lors de la réinitialisation: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                }
+              } else if (value == 'add_test') {
+                try {
+                  await widget.batchService.addTestBatch();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Couvée test ajoutée avec succès'),
+                      ),
+                    );
+                    _loadBatches();
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                            'Erreur lors de l\'ajout de la couvée test: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'reset',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_forever, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Réinitialiser les données'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'add_test',
+                child: Row(
+                  children: [
+                    Icon(Icons.add_circle_outline, color: Colors.blue),
+                    SizedBox(width: 8),
+                    Text('Ajouter une couvée test'),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -128,24 +227,93 @@ class _BatchPageState extends State<BatchPage> {
                             margin: const EdgeInsets.all(8.0),
                             child: ListTile(
                               title: Text(batch.name),
-                              subtitle: Text(
-                                  'Démarré le: ${_formatDate(batch.startDate)}'),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.show_chart),
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => SensorGraphsPage(
-                                        sensorService: widget.sensorService,
-                                        batchId: batch.id,
-                                        batchName: batch.name,
-                                        startDate: batch.startDate,
-                                      ),
-                                    ),
-                                  );
-                                },
-                                tooltip: 'Voir les graphiques',
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                      'Démarré le: ${_formatDate(batch.startDate)}'),
+                                  Text('Nombre d\'œufs: ${batch.numberOfEggs}'),
+                                ],
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.show_chart),
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              SensorGraphsPage(
+                                            sensorService: widget.sensorService,
+                                            batchId: batch.id,
+                                            batchName: batch.name,
+                                            startDate: batch.startDate,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    tooltip: 'Voir les graphiques',
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete,
+                                        color: Colors.red),
+                                    onPressed: () async {
+                                      final confirmed = await showDialog<bool>(
+                                        context: context,
+                                        builder: (context) => AlertDialog(
+                                          title:
+                                              const Text('Supprimer la couvée'),
+                                          content: Text(
+                                            'Êtes-vous sûr de vouloir supprimer la couvée "${batch.name}" ? Cette action est irréversible.',
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(context, false),
+                                              child: const Text('Annuler'),
+                                            ),
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(context, true),
+                                              child: const Text('Supprimer'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+
+                                      if (confirmed == true) {
+                                        try {
+                                          await widget.batchService
+                                              .deleteBatch(batch.id);
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                    'Couvée supprimée avec succès'),
+                                              ),
+                                            );
+                                            _loadBatches();
+                                          }
+                                        } catch (e) {
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              SnackBar(
+                                                content: Text(
+                                                    'Erreur lors de la suppression: $e'),
+                                                backgroundColor: Colors.red,
+                                              ),
+                                            );
+                                          }
+                                        }
+                                      }
+                                    },
+                                    tooltip: 'Supprimer la couvée',
+                                  ),
+                                ],
                               ),
                               onTap: () async {
                                 try {

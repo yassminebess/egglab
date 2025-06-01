@@ -4,6 +4,7 @@ import '../services/batch_service.dart';
 import '../services/component_service.dart';
 import '../services/history_service.dart';
 import '../services/sensor_data_service.dart';
+import '../services/incubation_report_service.dart';
 import 'history_batches_page.dart';
 import 'alert_batches_page.dart';
 import 'batch_page.dart';
@@ -15,6 +16,7 @@ class HomePage extends StatefulWidget {
   final ComponentService componentService;
   final HistoryService historyService;
   final SensorDataService sensorService;
+  final IncubationReportService reportService;
 
   const HomePage({
     super.key,
@@ -23,6 +25,7 @@ class HomePage extends StatefulWidget {
     required this.componentService,
     required this.historyService,
     required this.sensorService,
+    required this.reportService,
   });
 
   @override
@@ -87,6 +90,8 @@ class _HomePageState extends State<HomePage> {
                         MaterialPageRoute(
                           builder: (_) => HistoryBatchesPage(
                             historyService: widget.historyService,
+                            batchService: widget.batchService,
+                            reportService: widget.reportService,
                           ),
                         ),
                       ),

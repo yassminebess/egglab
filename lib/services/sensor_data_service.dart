@@ -75,6 +75,9 @@ class SensorDataService {
       // Generate initial data points
       await _generateInitialDataPoints();
 
+      // Generate first data point immediately
+      await _generateDataPoint();
+
       // Start generating new data points every 10 minutes
       _timer?.cancel();
       _timer = Timer.periodic(const Duration(minutes: 10), (timer) {
@@ -126,36 +129,51 @@ class SensorDataService {
 
     try {
       final now = DateTime.now();
-      final daysSinceStart = now.difference(_startDate!).inDays;
-      final pointsNeeded = math.min(
-          (daysSinceStart + 1) * 144, 1000); // Limit to 1000 points max
+      final twoHoursAgo = now.subtract(const Duration(hours: 2));
 
-      debugPrint('Generating $pointsNeeded initial data points');
+      debugPrint(
+          'Generating data points from ${twoHoursAgo.toString()} to ${now.toString()}');
 
       _temperatureHistory.clear();
       _humidityHistory.clear();
 
-      // Generate initial temperature data
-      for (int i = 0; i < pointsNeeded; i++) {
+      // Generate data points every 10 minutes for the last 2 hours
+      DateTime currentTime = twoHoursAgo;
+      while (!currentTime.isAfter(now)) {
         if (_isDisposed) return;
-
-        final timestamp = _startDate!.add(Duration(minutes: i * 10));
-        if (timestamp.isAfter(now)) break;
 
         final temp = _generateRandomValue(minTemp, maxTemp);
         _temperatureHistory.add(SensorDataPoint(
-          timestamp: timestamp,
+          timestamp: currentTime,
           value: temp,
           isAlert: temp < minTemp || temp > maxTemp,
         ));
 
         final humidity = _generateRandomValue(minHumidity, maxHumidity);
         _humidityHistory.add(SensorDataPoint(
-          timestamp: timestamp,
+          timestamp: currentTime,
           value: humidity,
           isAlert: humidity < minHumidity || humidity > maxHumidity,
         ));
+
+        // Move to next 10-minute interval
+        currentTime = currentTime.add(const Duration(minutes: 10));
       }
+
+      // Add current data point
+      final currentTemp = _generateRandomValue(minTemp, maxTemp);
+      _temperatureHistory.add(SensorDataPoint(
+        timestamp: now,
+        value: currentTemp,
+        isAlert: currentTemp < minTemp || currentTemp > maxTemp,
+      ));
+
+      final currentHumidity = _generateRandomValue(minHumidity, maxHumidity);
+      _humidityHistory.add(SensorDataPoint(
+        timestamp: now,
+        value: currentHumidity,
+        isAlert: currentHumidity < minHumidity || currentHumidity > maxHumidity,
+      ));
 
       // Sort data points by timestamp
       _temperatureHistory.sort((a, b) => a.timestamp.compareTo(b.timestamp));
@@ -180,6 +198,13 @@ class SensorDataService {
       }
 
       final now = DateTime.now();
+      final twoHoursAgo = now.subtract(const Duration(hours: 2));
+
+      // Remove old data points
+      _temperatureHistory
+          .removeWhere((point) => point.timestamp.isBefore(twoHoursAgo));
+      _humidityHistory
+          .removeWhere((point) => point.timestamp.isBefore(twoHoursAgo));
 
       // Generate temperature data
       final temp = _generateRandomValue(minTemp, maxTemp);
@@ -224,12 +249,6 @@ class SensorDataService {
           'Humidité anormale: ${humidity.toStringAsFixed(1)}%',
           _currentBatchId!,
         );
-      }
-
-      // Keep only the last 1000 points to prevent memory issues
-      if (_temperatureHistory.length > 1000) {
-        _temperatureHistory.removeRange(0, _temperatureHistory.length - 1000);
-        _humidityHistory.removeRange(0, _humidityHistory.length - 1000);
       }
     } catch (e, stackTrace) {
       debugPrint('Error generating data point: $e\n$stackTrace');

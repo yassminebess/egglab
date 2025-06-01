@@ -5,6 +5,7 @@ import '../models/history_event.dart';
 import '../services/alert_service.dart';
 import '../services/history_service.dart';
 import '../services/flip_eggs_reminder.dart';
+import 'package:flutter/foundation.dart';
 
 class BatchService {
   static const String _batchesKey = 'batches';
@@ -30,13 +31,24 @@ class BatchService {
           final json = jsonDecode(batchString);
           _batches.add(Batch.fromJson(json));
         } catch (e) {
-          print('Error parsing batch: $e');
+          debugPrint('Error parsing batch: $e');
         }
       }
     } catch (e) {
-      print('Error loading batches from SharedPreferences: $e');
+      debugPrint('Error loading batches from SharedPreferences: $e');
       _batches.clear();
       await _prefs.setStringList(_batchesKey, []);
+    }
+  }
+
+  Future<void> resetBatches() async {
+    try {
+      await _prefs.remove(_batchesKey);
+      _batches.clear();
+      debugPrint('Batches data has been reset');
+    } catch (e) {
+      debugPrint('Error resetting batches: $e');
+      rethrow;
     }
   }
 
@@ -244,5 +256,39 @@ class BatchService {
   Future<bool> adjustHumidity(Batch batch, double currentHumidity) async {
     // Implementation needed
     return false; // Mock value
+  }
+
+  Future<void> addTestBatch() async {
+    // Create a batch that started 21 days ago
+    final startDate = DateTime.now().subtract(const Duration(days: 21));
+    final batch = Batch(
+      id: 'test_batch_${DateTime.now().millisecondsSinceEpoch}',
+      name: 'Test Couvée',
+      startDate: startDate,
+      numberOfEggs: 12,
+      isActive: true,
+      notes: ['Couvée test créée pour le questionnaire'],
+    );
+    _batches.add(batch);
+    await _saveBatches(_batches);
+
+    // Log batch creation in history
+    await _historyService.addEvent(
+      HistoryEvent(
+        id: DateTime.now().toString(),
+        batchId: batch.id,
+        batchName: batch.name,
+        type: EventType.batchStart,
+        status: EventStatus.success,
+        description: 'Démarrage de la couvée test: ${batch.name}',
+        timestamp: startDate,
+      ),
+    );
+
+    // Add a note to indicate it's ready for questionnaire
+    await addNote(
+      batch.id,
+      'Cette couvée est prête pour le questionnaire final.',
+    );
   }
 }

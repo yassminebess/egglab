@@ -14,6 +14,8 @@ import 'package:egglab/services/component_service.dart';
 import 'package:egglab/services/notification_service.dart';
 import 'package:egglab/services/history_service.dart';
 import 'package:egglab/services/sensor_data_service.dart';
+import 'package:egglab/services/incubation_report_service.dart';
+import 'package:flutter/material.dart';
 
 void main() {
   testWidgets('EggLab app smoke test', (WidgetTester tester) async {
@@ -35,6 +37,7 @@ void main() {
     final sensorService =
         SensorDataService(alertService, batchService, historyService);
     final componentService = ComponentService(prefs, alertService);
+    final reportService = IncubationReportService(prefs);
 
     // Build our app and trigger a frame
     await tester.pumpWidget(
@@ -44,8 +47,22 @@ void main() {
         componentService: componentService,
         historyService: historyService,
         sensorService: sensorService,
+        reportService: reportService,
       ),
     );
+
+    // Wait for all widgets to build
+    await tester.pumpAndSettle();
+
+    // Try to scroll to the "Alertes" widget if it's not immediately visible
+    final alertesFinder = find.text('Alertes');
+    if (tester.widgetList(alertesFinder).isEmpty) {
+      await tester.scrollUntilVisible(
+        alertesFinder,
+        100.0,
+        scrollable: find.byType(GridView),
+      );
+    }
 
     // Verify that our app starts with the home page
     expect(find.text('EggLab'), findsOneWidget);
@@ -53,7 +70,7 @@ void main() {
     // Verify that main menu items are present
     expect(find.text('Ma Couvée'), findsOneWidget);
     expect(find.text('Historique'), findsOneWidget);
-    expect(find.text('Alertes'), findsOneWidget);
+    expect(alertesFinder, findsOneWidget);
     expect(find.text('Durée de Vie des Composants'), findsOneWidget);
 
     // Verify that we can navigate to the batch page

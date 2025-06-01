@@ -8,8 +8,8 @@ import 'services/component_service.dart';
 import 'services/history_service.dart';
 import 'services/sensor_data_service.dart';
 import 'screens/home_page.dart';
-import 'services/flip_eggs_reminder.dart';
 import 'dart:async';
+import 'services/incubation_report_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -65,6 +65,7 @@ void main() async {
   final sensorService =
       SensorDataService(alertService, batchService, historyService);
   final componentService = ComponentService(prefs, alertService);
+  final reportService = IncubationReportService(prefs);
 
   // Start periodic checks
   Timer.periodic(const Duration(minutes: 15), (timer) async {
@@ -83,6 +84,7 @@ void main() async {
       componentService: componentService,
       historyService: historyService,
       sensorService: sensorService,
+      reportService: reportService,
     ),
   );
 }
@@ -93,6 +95,7 @@ class MyApp extends StatelessWidget {
   final ComponentService componentService;
   final HistoryService historyService;
   final SensorDataService sensorService;
+  final IncubationReportService reportService;
 
   const MyApp({
     super.key,
@@ -101,6 +104,7 @@ class MyApp extends StatelessWidget {
     required this.componentService,
     required this.historyService,
     required this.sensorService,
+    required this.reportService,
   });
 
   // Global navigator key for navigation from notifications
@@ -123,6 +127,7 @@ class MyApp extends StatelessWidget {
         componentService: componentService,
         historyService: historyService,
         sensorService: sensorService,
+        reportService: reportService,
       ),
     );
   }
@@ -207,5 +212,44 @@ class NotificationController {
         );
       }
     }
+  }
+}
+
+// Add static methods to FlipEggsReminder class
+class FlipEggsReminder {
+  static Future<void> initialize() async {
+    // Initialize egg flipping reminder channel
+    await AwesomeNotifications().initialize(
+      null, // Use default app icon
+      [
+        NotificationChannel(
+          channelKey: 'flip_eggs_channel',
+          channelName: 'Egg Flipping Reminders',
+          channelDescription: 'Notification channel for egg flipping reminders',
+          defaultColor: Colors.orange,
+          importance: NotificationImportance.High,
+          enableVibration: true,
+        ),
+      ],
+    );
+  }
+
+  static Future<void> resetFlipSchedule(
+      {required String batchId, required String batchName}) async {
+    // Reset the flip schedule logic here
+    // For example, cancel existing notifications and schedule a new one
+    await AwesomeNotifications().cancelAll();
+    // Schedule a new notification for egg flipping
+    await AwesomeNotifications().createNotification(
+      content: NotificationContent(
+        id: 1,
+        channelKey: 'flip_eggs_channel',
+        title: 'Time to Flip Eggs',
+        body: 'It\'s time to flip the eggs for batch: $batchName',
+        payload: {'action': 'flip', 'batchId': batchId, 'batchName': batchName},
+      ),
+      schedule: NotificationCalendar.fromDate(
+          date: DateTime.now().add(const Duration(hours: 12))),
+    );
   }
 }

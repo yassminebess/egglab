@@ -31,11 +31,12 @@ class _SensorGraphState extends State<SensorGraph> {
 
   List<SensorDataPoint> get _visiblePoints {
     if (!_showFullHistory) {
-      // Show only last 18 points (3 hours)
-      if (widget.dataPoints.length > 18) {
-        return widget.dataPoints.sublist(widget.dataPoints.length - 18);
-      }
-      return widget.dataPoints;
+      // Show last 2 hours of data
+      final now = DateTime.now();
+      final twoHoursAgo = now.subtract(const Duration(hours: 2));
+      return widget.dataPoints
+          .where((point) => point.timestamp.isAfter(twoHoursAgo))
+          .toList();
     }
     return widget.dataPoints;
   }
@@ -72,7 +73,7 @@ class _SensorGraphState extends State<SensorGraph> {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 Text(
-                  _showFullHistory ? "Vue complète" : "Vue récente",
+                  _showFullHistory ? "Vue complète" : "Dernières 2 heures",
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey.shade600,
@@ -85,22 +86,44 @@ class _SensorGraphState extends State<SensorGraph> {
             Expanded(
               child: LineChart(
                 LineChartData(
-                  gridData: const FlGridData(show: true),
+                  gridData: FlGridData(
+                    show: true,
+                    drawVerticalLine: true,
+                    horizontalInterval:
+                        (widget.maxThreshold - widget.minThreshold) / 4,
+                    verticalInterval: 30,
+                    getDrawingHorizontalLine: (value) {
+                      return FlLine(
+                        color: Colors.grey.shade300,
+                        strokeWidth: 1,
+                      );
+                    },
+                    getDrawingVerticalLine: (value) {
+                      return FlLine(
+                        color: Colors.grey.shade300,
+                        strokeWidth: 1,
+                      );
+                    },
+                  ),
                   titlesData: FlTitlesData(
                     leftTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
-                        reservedSize: 40,
-                        interval: widget.maxThreshold - widget.minThreshold,
+                        reservedSize: 45,
+                        interval:
+                            (widget.maxThreshold - widget.minThreshold) / 4,
                         getTitlesWidget: (value, meta) {
-                          if (value.toStringAsFixed(1) ==
-                                  widget.minThreshold.toStringAsFixed(1) ||
-                              value.toStringAsFixed(1) ==
-                                  widget.maxThreshold.toStringAsFixed(1)) {
-                            return Text(
-                                '${value.toStringAsFixed(1)}${widget.unit}');
-                          }
-                          return const SizedBox.shrink();
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8.0),
+                            child: Text(
+                              '${value.toStringAsFixed(1)}${widget.unit}',
+                              style: TextStyle(
+                                color: Colors.grey.shade700,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          );
                         },
                       ),
                     ),
@@ -108,17 +131,27 @@ class _SensorGraphState extends State<SensorGraph> {
                       sideTitles: SideTitles(
                         showTitles: true,
                         reservedSize: 30,
+                        interval: 30, // Show time every 30 minutes
                         getTitlesWidget: (value, meta) {
+                          if (_visiblePoints.isEmpty) return const Text('');
+
                           final index = value.toInt();
                           if (index >= 0 && index < _visiblePoints.length) {
                             final point = _visiblePoints[index];
-                            return Padding(
-                              padding: const EdgeInsets.only(top: 8.0),
-                              child: Text(
-                                '${point.timestamp.hour}:${point.timestamp.minute.toString().padLeft(2, '0')}',
-                                style: const TextStyle(fontSize: 10),
-                              ),
-                            );
+                            // Only show time for every 30 minutes
+                            if (point.timestamp.minute % 30 == 0) {
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 8.0),
+                                child: Text(
+                                  '${point.timestamp.hour.toString().padLeft(2, '0')}:${point.timestamp.minute.toString().padLeft(2, '0')}',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade700,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              );
+                            }
                           }
                           return const Text('');
                         },
@@ -131,13 +164,19 @@ class _SensorGraphState extends State<SensorGraph> {
                       sideTitles: SideTitles(showTitles: false),
                     ),
                   ),
-                  borderData: FlBorderData(show: true),
+                  borderData: FlBorderData(
+                    show: true,
+                    border: Border.all(
+                      color: Colors.grey.shade300,
+                      width: 1,
+                    ),
+                  ),
                   minX: 0,
                   maxX: (_visiblePoints.length - 1).toDouble(),
                   minY: widget.minThreshold -
-                      ((widget.maxThreshold - widget.minThreshold) * 0.5),
+                      ((widget.maxThreshold - widget.minThreshold) * 0.2),
                   maxY: widget.maxThreshold +
-                      ((widget.maxThreshold - widget.minThreshold) * 0.5),
+                      ((widget.maxThreshold - widget.minThreshold) * 0.2),
                   lineBarsData: [
                     LineChartBarData(
                       spots: _visiblePoints.asMap().entries.map((entry) {
@@ -149,6 +188,7 @@ class _SensorGraphState extends State<SensorGraph> {
                       }).toList(),
                       isCurved: true,
                       color: widget.normalColor,
+                      barWidth: 2,
                       dotData: FlDotData(
                         show: true,
                         getDotPainter: (spot, percent, barData, index) {
