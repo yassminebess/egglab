@@ -8,15 +8,19 @@ class EggFlipCountdown extends StatefulWidget {
   final String batchName;
   final Function()? onFlip;
 
-  const EggFlipCountdown(
-      {super.key, required this.batchId, required this.batchName, this.onFlip});
+  const EggFlipCountdown({
+    super.key,
+    required this.batchId,
+    required this.batchName,
+    this.onFlip,
+  });
 
   @override
   State<EggFlipCountdown> createState() => _EggFlipCountdownState();
 }
 
 class _EggFlipCountdownState extends State<EggFlipCountdown> {
-  late Timer _timer;
+  Timer? _timer;
   DateTime _nextFlipTime = DateTime.now().add(const Duration(hours: 8));
   String _timeRemaining = '';
 
@@ -29,7 +33,7 @@ class _EggFlipCountdownState extends State<EggFlipCountdown> {
 
   @override
   void dispose() {
-    _timer.cancel();
+    _timer?.cancel();
     super.dispose();
   }
 
@@ -122,7 +126,9 @@ class _EggFlipCountdownState extends State<EggFlipCountdown> {
             ),
             const SizedBox(height: 12),
             ElevatedButton.icon(
-              onPressed: _manualFlip,
+              onPressed: () {
+                _manualFlip();
+              },
               icon: const Icon(Icons.touch_app),
               label: const Text('J\'ai retourné les oeufs'),
               style: ElevatedButton.styleFrom(

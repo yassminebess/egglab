@@ -41,10 +41,7 @@ class _HatchDetailPageState extends State<HatchDetailPage> {
   @override
   void initState() {
     super.initState();
-    debugPrint('HatchDetailPage: Initializing for batch ${widget.batch.name}');
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _safeInitialize();
-    });
+    _safeInitialize();
   }
 
   Future<void> _safeInitialize() async {
@@ -53,17 +50,28 @@ class _HatchDetailPageState extends State<HatchDetailPage> {
     try {
       // Stop any existing monitoring first
       widget.sensorService.stopMonitoring();
+      Future.delayed(Duration(microseconds: 500), () {
+        widget.sensorService.stopMonitoring();
+      });
 
+      // Initialize timeline events first
       await _initializeTimelineEvents();
       if (_isDisposed) return;
 
-      await _initializeMonitoring();
+      // Start monitoring immediately
+      await widget.sensorService.startMonitoring(
+        widget.batch.id,
+        widget.batch.name,
+        startDate: widget.batch.startDate,
+      );
+
       if (_isDisposed) return;
 
       if (mounted) {
         setState(() {
           _isInitialized = true;
           _isLoading = false;
+          _isMonitoring = true;
         });
       }
     } catch (e, stackTrace) {
@@ -72,6 +80,7 @@ class _HatchDetailPageState extends State<HatchDetailPage> {
         setState(() {
           _errorMessage = 'Erreur d\'initialisation: $e';
           _isLoading = false;
+          _isMonitoring = false;
         });
       }
     }
@@ -219,13 +228,14 @@ class _HatchDetailPageState extends State<HatchDetailPage> {
   }
 
   Widget _buildSensorGraph(
-      Stream<List<SensorDataPoint>> stream,
-      String title,
-      String unit,
-      double minThreshold,
-      double maxThreshold,
-      Color normalColor,
-      Color alertColor) {
+    Stream<List<SensorDataPoint>> stream,
+    String title,
+    String unit,
+    double minThreshold,
+    double maxThreshold,
+    Color normalColor,
+    Color alertColor,
+  ) {
     return StreamBuilder<List<SensorDataPoint>>(
       stream: stream,
       builder: (context, snapshot) {
@@ -276,6 +286,7 @@ class _HatchDetailPageState extends State<HatchDetailPage> {
             ),
             const SizedBox(height: 8),
             Expanded(
+              flex: 4,
               child: SensorGraph(
                 dataPoints: snapshot.data!,
                 title: title,
@@ -347,144 +358,128 @@ class _HatchDetailPageState extends State<HatchDetailPage> {
       );
     }
 
-    return WillPopScope(
-      onWillPop: () async {
-        widget.sensorService.stopMonitoring();
-        return true;
-      },
-      child: Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () {
-              widget.sensorService.stopMonitoring();
-              Navigator.of(context).pop();
-            },
-          ),
-          title: Text(widget.batch.name),
-          actions: [
-            IconButton(
-              icon: Icon(_isMonitoring ? Icons.pause : Icons.play_arrow),
-              onPressed: _toggleMonitoring,
-              tooltip: _isMonitoring
-                  ? 'Arrêter la surveillance'
-                  : 'Démarrer la surveillance',
-            ),
-          ],
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            widget.sensorService.stopMonitoring();
+            Navigator.of(context).pop();
+          },
         ),
-        body: SafeArea(
-          child: RefreshIndicator(
-            onRefresh: () async {
-              await _safeInitialize();
-            },
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Container(
-                    margin: const EdgeInsets.symmetric(vertical: 24.0),
-                    width: double.infinity,
-                    alignment: Alignment.center,
-                    child: IncubationProgress(
-                      startDate: widget.batch.startDate,
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16.0, vertical: 8.0),
-                    child: EggFlipCountdown(
-                      batchId: widget.batch.id,
-                      batchName: widget.batch.name,
-                      onFlip: () {
-                        if (!_isDisposed && mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content:
-                                  Text('Retournement des oeufs enregistré !'),
-                              backgroundColor: Colors.amber,
-                            ),
-                          );
-                        }
-                      },
-                    ),
-                  ),
-                  const Divider(height: 16),
-                  // Sensor Graphs
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16.0, vertical: 8.0),
-                    child: Column(
-                      children: [
-                        SizedBox(
-                          height: 200,
-                          child: _buildSensorGraph(
-                            widget.sensorService.temperatureStream,
-                            'Température',
-                            '°C',
-                            SensorDataService.minTemp,
-                            SensorDataService.maxTemp,
-                            Colors.red,
-                            Colors.orange,
-                          ),
+        title: Text(widget.batch.name),
+        actions: [
+          IconButton(
+            icon: Icon(_isMonitoring ? Icons.pause : Icons.play_arrow),
+            onPressed: _toggleMonitoring,
+            tooltip: _isMonitoring
+                ? 'Arrêter la surveillance'
+                : 'Démarrer la surveillance',
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: () async {
+            await _safeInitialize();
+          },
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 24.0),
+                width: double.infinity,
+                alignment: Alignment.center,
+                child: IncubationProgress(
+                  startDate: widget.batch.startDate,
+                ),
+              ),
+              /* Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: EggFlipCountdown(
+                  key: ValueKey(widget.batch.id),
+                  batchId: widget.batch.id,
+                  batchName: widget.batch.name,
+                  onFlip: () {
+                    if (!_isDisposed && mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Retournement des oeufs enregistré !'),
+                          backgroundColor: Colors.amber,
                         ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          height: 200,
-                          child: _buildSensorGraph(
-                            widget.sensorService.humidityStream,
-                            'Humidité',
-                            '%',
-                            SensorDataService.minHumidity,
-                            SensorDataService.maxHumidity,
-                            Colors.blue,
-                            Colors.red,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Timeline
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16.0),
-                    child: SizedBox(
-                      height: 350,
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: _visibleEvents.length,
-                        itemBuilder: (context, i) {
-                          final event = _visibleEvents[i];
-                          final eventDate = event['date'] as DateTime;
-                          final isLast = i == _visibleEvents.length - 1;
-                          final daysDiff =
-                              eventDate.difference(DateTime.now()).inDays;
-                          final isPast = DateTime.now().isAfter(eventDate);
-                          String subtitle;
-                          if (isPast) {
-                            subtitle =
-                                event['after'] is String ? event['after'] : '';
-                          } else {
-                            subtitle = event['before'] is Function
-                                ? event['before'](daysDiff)
-                                : '';
-                          }
-                          return CustomTimelineTile(
-                            title: event['title'] as String,
-                            date: eventDate,
-                            currentDay: 0,
-                            totalDays: 0,
-                            isCompleted: isPast,
-                            isLast: isLast,
-                            subtitle: subtitle,
-                          );
-                        },
+                      );
+                    }
+                  },
+                ),
+              ), */
+              const Divider(height: 16),
+              // Sensor Graphs
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      height: 300,
+                      child: _buildSensorGraph(
+                        widget.sensorService.temperatureStream,
+                        'Température',
+                        '°C',
+                        SensorDataService.minTemp,
+                        SensorDataService.maxTemp,
+                        Colors.orange,
+                        Colors.red,
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      height: 300,
+                      child: _buildSensorGraph(
+                        widget.sensorService.humidityStream,
+                        'Humidité',
+                        '%',
+                        SensorDataService.minHumidity,
+                        SensorDataService.maxHumidity,
+                        Colors.blue,
+                        Colors.red,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
+              // Timeline
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16.0),
+                child: Column(
+                  children: _visibleEvents.map((event) {
+                    final eventDate = event['date'] as DateTime;
+                    final isLast = event == _visibleEvents.last;
+                    final daysDiff =
+                        eventDate.difference(DateTime.now()).inDays;
+                    final isPast = DateTime.now().isAfter(eventDate);
+                    String subtitle;
+                    if (isPast) {
+                      subtitle = event['after'] is String ? event['after'] : '';
+                    } else {
+                      subtitle = event['before'] is Function
+                          ? event['before'](daysDiff)
+                          : '';
+                    }
+                    return CustomTimelineTile(
+                      key: ValueKey(event['title']),
+                      title: event['title'] as String,
+                      date: eventDate,
+                      currentDay: 0,
+                      totalDays: 0,
+                      isCompleted: isPast,
+                      isLast: isLast,
+                      subtitle: subtitle,
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
           ),
         ),
       ),
