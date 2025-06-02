@@ -366,99 +366,127 @@ class _BatchPageState extends State<BatchPage> {
   }
 
   Future<void> _showAddBatchDialog(BuildContext context) async {
-    final nameController = TextEditingController();
-    final eggsController = TextEditingController();
-    DateTime startDate = DateTime.now();
-    bool isDialogClosed = false;
-
-    try {
-      await showDialog(
-        context: context,
-        barrierDismissible: true,
-        builder: (context) => AlertDialog(
-          title: const Text('Nouvelle Couvée'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Nom de la couvée',
-                ),
-                autofocus: true,
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: eggsController,
-                decoration: const InputDecoration(
-                  labelText: 'Nombre d\'oeufs',
-                ),
-                keyboardType: TextInputType.number,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                if (!isDialogClosed) {
-                  isDialogClosed = true;
-                  Navigator.of(context).pop();
-                }
-              },
-              child: const Text('Annuler'),
-            ),
-            TextButton(
-              onPressed: () async {
-                if (nameController.text.isEmpty ||
-                    eggsController.text.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('Veuillez remplir tous les champs')),
-                  );
-                  return;
-                }
-
-                final eggCount = int.tryParse(eggsController.text) ?? 0;
-                if (eggCount <= 0) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content:
-                            Text('Le nombre d\'oeufs doit être supérieur à 0')),
-                  );
-                  return;
-                }
-
-                try {
-                  await widget.batchService.addBatch(
-                    name: nameController.text,
-                    eggCount: eggCount,
-                    startDate: startDate,
-                  );
-                  if (mounted && !isDialogClosed) {
-                    isDialogClosed = true;
-                    Navigator.of(context).pop();
-                    await _loadBatches();
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Erreur: $e')),
-                    );
-                  }
-                }
-              },
-              child: const Text('Ajouter'),
-            ),
-          ],
-        ),
-      );
-    } finally {
-      nameController.dispose();
-      eggsController.dispose();
-    }
+    await showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) => AddBatchDialog(
+        batchService: widget.batchService,
+        onBatchAdded: _loadBatches,
+      ),
+    );
   }
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
+  }
+}
+
+class AddBatchDialog extends StatefulWidget {
+  final BatchService batchService;
+  final Function() onBatchAdded;
+
+  const AddBatchDialog({
+    super.key,
+    required this.batchService,
+    required this.onBatchAdded,
+  });
+
+  @override
+  State<AddBatchDialog> createState() => _AddBatchDialogState();
+}
+
+class _AddBatchDialogState extends State<AddBatchDialog> {
+  final _nameController = TextEditingController();
+  final _eggsController = TextEditingController();
+  final _startDate = DateTime.now();
+  bool _isDialogClosed = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _eggsController.dispose();
+    super.dispose();
+  }
+
+  void _closeDialog() {
+    if (!_isDialogClosed) {
+      setState(() {
+        _isDialogClosed = true;
+      });
+      Navigator.of(context).pop();
+    }
+  }
+
+  Future<void> _addBatch() async {
+    if (_nameController.text.isEmpty || _eggsController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Veuillez remplir tous les champs')),
+      );
+      return;
+    }
+
+    final eggCount = int.tryParse(_eggsController.text) ?? 0;
+    if (eggCount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Le nombre d\'oeufs doit être supérieur à 0')),
+      );
+      return;
+    }
+
+    try {
+      await widget.batchService.addBatch(
+        name: _nameController.text,
+        eggCount: eggCount,
+        startDate: _startDate,
+      );
+      if (mounted && !_isDialogClosed) {
+        _closeDialog();
+        widget.onBatchAdded();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Nouvelle Couvée'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _nameController,
+            decoration: const InputDecoration(
+              labelText: 'Nom de la couvée',
+            ),
+            autofocus: true,
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _eggsController,
+            decoration: const InputDecoration(
+              labelText: 'Nombre d\'oeufs',
+            ),
+            keyboardType: TextInputType.number,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _closeDialog,
+          child: const Text('Annuler'),
+        ),
+        TextButton(
+          onPressed: _addBatch,
+          child: const Text('Ajouter'),
+        ),
+      ],
+    );
   }
 }
