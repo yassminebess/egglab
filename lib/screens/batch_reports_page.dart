@@ -113,8 +113,8 @@ class _BatchReportsPageState extends State<BatchReportsPage> {
                                         )),
                               ],
                             ),
-                            if ((report.additionalComments ?? '')
-                                .isNotEmpty) ...[
+                            if (report.additionalComments != null &&
+                                report.additionalComments!.isNotEmpty) ...[
                               const SizedBox(height: 8),
                               Text('Commentaire: ${report.additionalComments!}',
                                   style: const TextStyle(

@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 class IncubationReport {
   final String id;
   final String batchId;

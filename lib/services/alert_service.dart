@@ -11,6 +11,8 @@ class AlertService {
 
   AlertService(this._prefs, this._notificationService);
 
+  NotificationService get notificationService => _notificationService;
+
   Future<List<Alert>> getAlerts({bool activeOnly = false}) async {
     final alertsJson = _prefs.getStringList(_alertsKey) ?? [];
     final alerts = alertsJson

@@ -369,84 +369,93 @@ class _BatchPageState extends State<BatchPage> {
     final nameController = TextEditingController();
     final eggsController = TextEditingController();
     DateTime startDate = DateTime.now();
+    bool isDialogClosed = false;
 
-    await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Nouvelle Couvée'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'Nom de la couvée',
+    try {
+      await showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) => AlertDialog(
+          title: const Text('Nouvelle Couvée'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Nom de la couvée',
+                ),
+                autofocus: true,
               ),
-              autofocus: true,
+              const SizedBox(height: 8),
+              TextField(
+                controller: eggsController,
+                decoration: const InputDecoration(
+                  labelText: 'Nombre d\'oeufs',
+                ),
+                keyboardType: TextInputType.number,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                if (!isDialogClosed) {
+                  isDialogClosed = true;
+                  Navigator.of(context).pop();
+                }
+              },
+              child: const Text('Annuler'),
             ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: eggsController,
-              decoration: const InputDecoration(
-                labelText: 'Nombre d\'oeufs',
-              ),
-              keyboardType: TextInputType.number,
+            TextButton(
+              onPressed: () async {
+                if (nameController.text.isEmpty ||
+                    eggsController.text.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Veuillez remplir tous les champs')),
+                  );
+                  return;
+                }
+
+                final eggCount = int.tryParse(eggsController.text) ?? 0;
+                if (eggCount <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content:
+                            Text('Le nombre d\'oeufs doit être supérieur à 0')),
+                  );
+                  return;
+                }
+
+                try {
+                  await widget.batchService.addBatch(
+                    name: nameController.text,
+                    eggCount: eggCount,
+                    startDate: startDate,
+                  );
+                  if (mounted && !isDialogClosed) {
+                    isDialogClosed = true;
+                    Navigator.of(context).pop();
+                    await _loadBatches();
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Erreur: $e')),
+                    );
+                  }
+                }
+              },
+              child: const Text('Ajouter'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-            child: const Text('Annuler'),
-          ),
-          TextButton(
-            onPressed: () async {
-              if (nameController.text.isEmpty || eggsController.text.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Veuillez remplir tous les champs')),
-                );
-                return;
-              }
-
-              final eggCount = int.tryParse(eggsController.text) ?? 0;
-              if (eggCount <= 0) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content:
-                          Text('Le nombre d\'oeufs doit être supérieur à 0')),
-                );
-                return;
-              }
-
-              try {
-                await widget.batchService.addBatch(
-                  name: nameController.text,
-                  eggCount: eggCount,
-                  startDate: startDate,
-                );
-                if (mounted) {
-                  Navigator.of(context).pop();
-                  await _loadBatches();
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Erreur: $e')),
-                  );
-                }
-              }
-            },
-            child: const Text('Ajouter'),
-          ),
-        ],
-      ),
-    );
-
-    nameController.dispose();
-    eggsController.dispose();
+      );
+    } finally {
+      nameController.dispose();
+      eggsController.dispose();
+    }
   }
 
   String _formatDate(DateTime date) {
