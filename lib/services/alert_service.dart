@@ -3,13 +3,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/alert.dart';
 import 'notification_service.dart';
 import '../services/flip_eggs_reminder.dart';
+import '../services/batch_service.dart';
 
 class AlertService {
   static const String _alertsKey = 'alerts';
   final SharedPreferences _prefs;
   final NotificationService _notificationService;
+  final BatchService _batchService;
 
-  AlertService(this._prefs, this._notificationService);
+  AlertService(this._prefs, this._notificationService, this._batchService);
 
   NotificationService get notificationService => _notificationService;
 
@@ -133,6 +135,7 @@ class AlertService {
     await FlipEggsReminder.scheduleEggFlipping(
       batchId: batchId,
       batchName: batchName,
+      batchService: _batchService,
     );
   }
 
@@ -146,12 +149,20 @@ class AlertService {
         'Température trop basse: ${temperature.toStringAsFixed(1)}°C',
         batchId,
       );
+      // Schedule alert removal after 2 hours
+      Future.delayed(const Duration(hours: 2), () {
+        _removeAlert(AlertType.temperature, batchId);
+      });
     } else if (temperature > maxTemp) {
       await addAlert(
         AlertType.temperature,
         'Température trop élevée: ${temperature.toStringAsFixed(1)}°C',
         batchId,
       );
+      // Schedule alert removal after 2 hours
+      Future.delayed(const Duration(hours: 2), () {
+        _removeAlert(AlertType.temperature, batchId);
+      });
     }
   }
 
@@ -165,12 +176,34 @@ class AlertService {
         'Humidité trop basse: ${humidity.toStringAsFixed(1)}%',
         batchId,
       );
+      // Schedule alert removal after 2 hours
+      Future.delayed(const Duration(hours: 2), () {
+        _removeAlert(AlertType.humidity, batchId);
+      });
     } else if (humidity > maxHumidity) {
       await addAlert(
         AlertType.humidity,
         'Humidité trop élevée: ${humidity.toStringAsFixed(1)}%',
         batchId,
       );
+      // Schedule alert removal after 2 hours
+      Future.delayed(const Duration(hours: 2), () {
+        _removeAlert(AlertType.humidity, batchId);
+      });
+    }
+  }
+
+  Future<void> _removeAlert(AlertType type, String batchId) async {
+    final alerts = await getAlerts();
+    try {
+      final alertToRemove = alerts.firstWhere(
+        (alert) =>
+            alert.type == type && alert.batchId == batchId && !alert.isResolved,
+      );
+      await resolveAlert(alertToRemove.id);
+    } catch (e) {
+      // Alert not found or already resolved
+      return;
     }
   }
 }

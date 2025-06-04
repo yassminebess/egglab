@@ -55,13 +55,15 @@ void main() async {
   final notificationService = NotificationService();
   await notificationService.initialize();
 
-  final alertService = AlertService(prefs, notificationService);
   final historyService = HistoryService(prefs);
   final batchService = BatchService(
     prefs,
-    alertService,
+    null, // We'll set this after creating alertService
     historyService,
   );
+  final alertService = AlertService(prefs, notificationService, batchService);
+  batchService.alertService =
+      alertService; // Set the alertService after creation
   final sensorService =
       SensorDataService(alertService, batchService, historyService);
   final componentService = ComponentService(prefs, alertService);

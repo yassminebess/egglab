@@ -28,12 +28,14 @@ void main() {
     await notificationService.initialize();
 
     final historyService = HistoryService(prefs);
-    final alertService = AlertService(prefs, notificationService);
     final batchService = BatchService(
       prefs,
-      alertService,
+      null, // We'll set this after creating alertService
       historyService,
     );
+    final alertService = AlertService(prefs, notificationService, batchService);
+    batchService.alertService =
+        alertService; // Set the alertService after creation
     final sensorService =
         SensorDataService(alertService, batchService, historyService);
     final componentService = ComponentService(prefs, alertService);

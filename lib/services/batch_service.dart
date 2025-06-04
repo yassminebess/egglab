@@ -10,7 +10,7 @@ import 'package:flutter/foundation.dart';
 class BatchService {
   static const String _batchesKey = 'batches';
   final SharedPreferences _prefs;
-  final AlertService _alertService;
+  AlertService? _alertService;
   final HistoryService _historyService;
   final List<Batch> _batches = [];
 
@@ -20,6 +20,10 @@ class BatchService {
     this._historyService,
   ) {
     _loadBatchesFromPrefs();
+  }
+
+  set alertService(AlertService service) {
+    _alertService = service;
   }
 
   Future<void> _loadBatchesFromPrefs() async {
@@ -88,6 +92,7 @@ class BatchService {
     await FlipEggsReminder.scheduleEggFlipping(
       batchId: batch.id,
       batchName: batch.name,
+      batchService: this,
     );
 
     // Log batch creation in history
@@ -210,8 +215,10 @@ class BatchService {
       final currentHumidity = await getCurrentHumidity();
 
       // Check temperature and humidity using alert service
-      await _alertService.checkTemperature(currentTemp, batch.id);
-      await _alertService.checkHumidity(currentHumidity, batch.id);
+      if (_alertService != null) {
+        await _alertService!.checkTemperature(currentTemp, batch.id);
+        await _alertService!.checkHumidity(currentHumidity, batch.id);
+      }
 
       final tempAdjusted = await adjustTemperature(batch, currentTemp);
       final humidityAdjusted = await adjustHumidity(batch, currentHumidity);
@@ -290,5 +297,14 @@ class BatchService {
       batch.id,
       'Cette couvée est prête pour le questionnaire final.',
     );
+  }
+
+  Future<Batch?> getBatch(String batchId) async {
+    final batches = await getBatches();
+    try {
+      return batches.firstWhere((batch) => batch.id == batchId);
+    } catch (e) {
+      return null;
+    }
   }
 }

@@ -530,6 +530,8 @@ class _HatchDetailPageState extends State<HatchDetailPage> {
                     key: ValueKey('egg_flip_${widget.batch.id}'),
                     batchId: widget.batch.id,
                     batchName: widget.batch.name,
+                    batchService: widget.batchService,
+                    alertService: widget.alertService,
                   ),
                 ),
                 const Divider(height: 16),
